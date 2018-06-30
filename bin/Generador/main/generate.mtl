@@ -1,0 +1,186 @@
+[comment encoding = UTF-8 /]
+[module generate('http://www.eclipse.org/uml2/5.0.0/UML')]
+
+[template public generarCodigo(modelo : Model)]
+[comment @main/]
+[for (casoDeUso : UseCase | modelo.member->select(miembro | miembro.oclIsTypeOf(UseCase)))]
+[if (casoDeUso.getAppliedStereotypes()->collect(st | st.name)->includes('get'))]
+[generarJSPGet(casoDeUso)/]
+[elseif (casoDeUso.getAppliedStereotypes()->collect(st | st.name)->includes('post'))]
+[generarJSPPost(casoDeUso)/]
+[/if]
+[/for]
+
+[for (clase : Class | modelo.member->select(miembro | miembro.oclIsTypeOf(Class)))]
+[if (clase.getAppliedStereotypes()->collect(st | st.name)->includes('singleton'))]
+[generarSingleton(clase)/]
+[elseif (clase.getAppliedStereotypes()->collect(st | st.name)->includes('bsonable'))]
+[generarBsonable(clase)/]
+[/if]
+[/for]
+[/template]
+
+[template public generarJSPGet (casoDeUso : UseCase) ]
+[let nombre : String = casoDeUso.name]
+[file (nombre.concat('.jsp'), false, 'UTF-8')]
+<%@ page language="java" contentType="application/json; charset=UTF-8" pageEncoding="UTF-8"%>
+<%@ page import="org.json.*, edu.uclm.esi.disoft.dominio.Manager" %>
+
+<%
+	response.addHeader("Access-Control-Allow-Origin", "*");
+	JSONArray resultado=Manager.get().[nombre/]();
+%>
+
+<%= resultado %>
+[/file]
+[/let]
+[/template]
+
+[template public generarJSPPost (casoDeUso : UseCase) ]
+[let nombre : String = casoDeUso.name]
+[file (nombre.concat('.jsp'), false, 'UTF-8')]
+<%@ page language="java" contentType="application/json; charset=UTF-8" pageEncoding="UTF-8"%>
+<%@ page import="org.json.*, edu.uclm.esi.disoft.dominio.Manager" %>
+
+<%
+	response.addHeader("Access-Control-Allow-Origin", "*");
+	String p=request.getParameter("p");
+	JSONObject jso=new JSONObject(p);
+	
+	JSONObject respuesta=new JSONObject();
+	try {
+		Manager.get().[nombre/](jso);
+		respuesta.put("resultado", "OK");
+	}
+	catch (Exception e) {
+		respuesta.put("resultado", "ERROR");
+		respuesta.put("mensaje", e.getMessage());
+	}
+%>
+
+<%= respuesta %>
+[/file]
+[/let]
+[/template]
+[template public generarSingleton (clase : Class) ]
+[file (clase.name.concat('.java'), false, 'UTF-8')]
+package edu.uclm.esi.disoft.dominio;
+
+import java.util.Enumeration;
+import java.util.concurrent.ConcurrentHashMap;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+
+public class [clase.name/] {
+	[for (campo : Property | clase.attribute)]
+	[let tipoDelCampo : Class = campo.type.oclAsType(Class)]
+	[let campoIndexador : Property = getCampoIndexador(tipoDelCampo)]
+	private ConcurrentHashMap<[campoIndexador.type.name/], [campo.type.name/]> [campo.name/];
+	[/let]
+	[/let]
+	[/for]
+	
+	private [clase.name/]() {
+	}
+	
+	private static class [clase.name/]Holder {
+		static [clase.name/] singleton=new [clase.name/]();
+	}
+	
+	public static [clase.name/] get() {
+		return [clase.name/]Holder.singleton;
+	}
+
+[generarMetodosAdd(clase)/]
+}
+[/file]
+
+
+[/template]
+[template public generarMetodosAdd(clase:Class)]
+[for (campo : Property | clase.attribute)]
+	[let tipoDelCampo : Class = campo.type.oclAsType(Class)]
+	[let campoIndexador : Property = getCampoIndexador(tipoDelCampo)]
+public void add(tipoDelCampo.name/] [tipoDelCampo.name.toLowerFirst()/])
+{
+	this.[campo.name/].put([tipoDelCampo.name.toLowerFirst()/].get[campoIndexador.name/](), [tipoDelCampo.name.toLowerFirst()/]);
+}
+	[/let]
+	[/let]
+	[/for]
+[/template]
+[template public generarBsonable (clase : Class) ]
+[file (clase.name.concat('.java'),false,'UTF-8')]
+
+
+package edu.uclm.esi.disoft.comandas.dominio;
+
+import org.json.JSONObject;
+
+import edu.uclm.esi.disoft.comandas.etiquetas.JSONable;
+
+import edu.uclm.esi.disoft.comandas.etiquetas.BSONable;
+
+@BSONable
+public class [clase.name/] {
+	[addcampos(clase)/]
+
+	private int _id;
+	private Comanda comandaActual;
+	public [clase.name/]() {
+addValoresPorDefecto
+}
+      [addGets(clase)/]		
+[addSetsYAdds(clase)/]
+
+	
+	
+
+
+[/file]
+[/template]
+[template public addValoresPorDefecto(clase:Class)]
+[for (campo: Property |clase.attribute)]
+[if (campo.upper=-1)]
+this.[campo.name/]=new vector<>();
+[elseif(campo.defaultValue<>null)]
+[let valorPorDefecto: StringExpression=campo.defaultValue.oclAsType(StringExpression)]
+this.[campo.name/]=[valorPorDefecto/];
+[/let]
+[/if]
+[/for]
+[/template]
+[template public addGets(clase:Class)]
+[for (campo: Property |clase.attribute)]
+public[if (campo.upper=-1)] java.util.Vector<[campo.type.name/]>[else][campo.type.name/][/if][campo.name.toUpperFirst()/](){
+return this.[campo.name/];
+}
+
+[/for]
+[/template]
+[template public addSetsYAdds(clase:Class)]
+[for (campo: Property |clase.attribute)]
+[if (campo.upper=-1)]
+public void add([campo.type.name/] [campo.type.name.toLowerFirst()/]){
+  this.[campo.name/].add( [campo.type.name.toLowerFirst()/]);
+}
+[else]
+public void set[campo.type.name.toUpperFirst()/]([campo.type.name/][campo.name.toLowerFirst()/]){
+this.[campo.name/]=[campo.name.toLowerFirst()/];
+}
+[/if]
+[/for]
+[/template]
+
+[template public addcampos(clase :Class)]
+[for (campo: Property |clase.attribute)]
+private[if (campo.upper=-1)] java.util.Vector<[campo.type.name/]>[else][campo.type.name/][/if][campo.name/];
+
+[/for]
+[/template]
+[query public getCampoIndexador(clase : Class) : Property = clase.attribute->select(campo | tieneEstereotipo(campo, 'indexador'))->asSequence()->first() /]
+
+[query public tieneEstereotipo(campo : Property, nombre : String) : Boolean = campo.getAppliedStereotypes()-> collect(estereotipo | estereotipo.name)->includes(nombre)/]
+
